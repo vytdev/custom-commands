@@ -1,0 +1,30 @@
+{
+  "name": "custom-commands",
+  "version": "0.1.0",
+  "description": "Minecraft Bedrock custom commands",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "npm run build",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vytdev/custom-commands.git"
+  },
+  "keywords": [
+    "minecraft",
+    "bedrock",
+    "custom-commands"
+  ],
+  "author": "VYT",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/vytdev/custom-commands/issues"
+  },
+  "homepage": "https://github.com/vytdev/custom-commands#readme",
+  "devDependencies": {
+    "@minecraft/server": "^1.4.0-beta.1.20.10-stable",
+    "typescript": "^5.1.0"
+  }
+}

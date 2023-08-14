@@ -1,0 +1,42 @@
+{
+    "format_version": 2,
+    "header": {
+        "name": "Custom Commands",
+        "description": "Custom commands implementation for Minecraft Bedrock. Created by §bvytdev§r.",
+        "uuid": "d3ca1a3b-eb60-4117-64d7-8a6601202602",
+        "version": [0, 1, 0],
+        "min_engine_version": [ 1, 20, 10 ]
+    },
+    "capabilities": [
+        "script_eval"
+    ],
+    "modules": [
+        {
+            "description": "behaviour",
+            "type": "data",
+            "uuid": "c77a8e8a-6227-444c-c27b-f03859539b08",
+            "version": [0, 0, 1]
+        },
+        {
+            "description": "scripts",
+            "type": "script",
+            "language": "javascript",
+            "entry": "scripts/index.js",
+            "uuid": "ff90f3f7-6106-47ac-3016-4565d4eeb884",
+            "version": [0, 0, 1]
+        }
+    ],
+    "dependencies": [
+        {
+            "module_name": "@minecraft/server",
+            "version": "1.4.0-beta"
+        }
+    ],
+    "metadata": {
+        "authors": [
+            "VYT"
+        ],
+        "license": "MIT",
+        "url": "https://github.com/vytdev/custom-commands"
+    }
+}
