@@ -2,7 +2,6 @@
   "name": "custom-commands",
   "version": "0.1.0",
   "description": "Minecraft Bedrock custom commands",
-  "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "npm run build",

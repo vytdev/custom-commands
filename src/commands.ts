@@ -34,6 +34,100 @@ export type CommandTypeParser = (argv: CommandToken[], argDef: CommandArgument) 
 export type CommandCallback = (ctx: CommandContext) => void;
 
 /**
+ * Command argument definition
+ */
+export interface CommandArgumentType {
+    /**
+     * Name of the argument displayed on the help
+     */
+    name?: string;
+    /**
+     * Type of the argument
+     */
+    type: string | CommandTypeParser;
+    /**
+     * Where to place the argument value when parsed
+     */
+    dest: string;
+    /**
+     * Help message
+     */
+    help?: string;
+    /**
+     * Whether this argument is required
+     */
+    required?: boolean;
+    /**
+     * Default value for the argument
+     */
+    default?: any;
+    /**
+     * Allow custom attributes
+     */
+    [key: string]: any;
+}
+
+/**
+ * Command flag definition
+ */
+export interface CommandFlagType {
+    /**
+     * The place of this flag on the object when parsed
+     */
+    dest: string;
+    /**
+     * Long flag
+     */
+    long?: string;
+    /**
+     * Short flag
+     */
+    short?: string;
+    /**
+     * Help message
+     */
+    help?: string;
+    /**
+     * Arguments within the flag
+     */
+    args?: CommandArgumentType[];
+}
+
+/**
+ * Command builder type
+ */
+export interface CommandBuilderType {
+    /**
+     * Name of the sub-command to use when invoking or in help
+     */
+    name: string;
+    /**
+     * Where to place the argument value when parsed
+     */
+    dest: string;
+    /**
+     * Aliases for the command/sub-command
+     */
+    aliases?: string[];
+    /**
+     * Help message
+     */
+    help?: string;
+    /**
+     * Positional arguments definition
+     */
+    args?: CommandArgumentType[];
+    /**
+     * Flags definition
+     */
+    flags?: CommandFlagType[];
+    /**
+     * Sub-commands definition
+     */
+    subcommands?: CommandBuilderType[];
+}
+
+/**
  * The parsed command arguments
  */
 export interface ParsedArgs {
@@ -152,7 +246,19 @@ export function tokenizeCommand(cmd: string, startIndex?: number): CommandToken[
 /**
  * Command argument definition
  */
-export class CommandArgument {
+export class CommandArgument implements CommandArgumentType {
+    /**
+     * Create a command argument instance from an object
+     * @param obj The argument definition
+     * @returns {CommandArgument}
+     */
+    public static from(obj: CommandArgumentType): CommandArgument {
+        const cls = new CommandArgument(obj.name, obj.type, obj.dest);
+        if ("help" in obj) cls.help = obj.help;
+        if ("required" in obj) cls.required = obj.required;
+        if ("default" in obj) cls.default = obj.default;
+        return cls;
+    }
     /**
      * Creates new argument instance
      * @param name
@@ -236,6 +342,20 @@ export class CommandArgument {
  */
 export class CommandFlag {
     /**
+     * Create a command flag instance from an object
+     * @param obj The flag definition
+     * @returns {CommandFlag}
+     */
+    public static from(obj: CommandFlagType): CommandFlag {
+        const cls = new CommandFlag(obj.long, obj.short, obj.dest);
+        if ("args" in obj) {
+            for (const argDef of obj.args) {
+                cls.args.push(CommandArgument.from(argDef));
+            }
+        }
+        return cls;
+    }
+    /**
      * Create a new flag definition instance
      */
     constructor(long: string, short?: string, id?: string) {
@@ -256,15 +376,28 @@ export class CommandFlag {
      */
     public short: string;
     /**
+     * Help message
+     */
+    public help: string;
+    /**
      * Arguments within the flag
      */
     public args: CommandArgument[] = [];
+    /**
+     * Set help message
+     * @returns {this}
+     */
+    public setHelp(msg: string): this {
+        this.help = msg;
+        return this;
+    }
     /**
      * Add argument on the flag
      * @param name
      * @param type
      * @param [id]
      * @param [build]
+     * @returns {this}
      */
     public addArgument(name: string, type: string | CommandTypeParser, id?: string, build?: (arg: CommandArgument) => void): this {
         const arg = new CommandArgument(name, type, id);
@@ -278,6 +411,32 @@ export class CommandFlag {
  * Command builder
  */
 export class CommandBuilder {
+    /**
+     * Create a command builder instance from an object
+     * @param obj The builder definition
+     * @returns {CommandBuilder}
+     */
+    public static from(obj: CommandBuilderType): CommandBuilder {
+        const cls = new CommandBuilder(obj.name, obj.dest);
+        if ("aliases" in obj) cls.aliases = obj.aliases;
+        if ("help" in obj) cls.help = obj.help;
+        if ("args" in obj) {
+            for (const argDef of obj.args) {
+                cls.args.push(CommandArgument.from(argDef));
+            }
+        }
+        if ("flags" in obj) {
+            for (const flagDef of obj.flags) {
+                cls.flags.push(CommandFlag.from(flagDef));
+            }
+        }
+        if ("subcommands" in obj) {
+            for (const subDef of obj.subcommands) {
+                cls.subcommands.push(CommandBuilder.from(subDef));
+            }
+        }
+        return cls;
+    }
     /**
      * Create a new command builder
      * @param name
@@ -300,6 +459,10 @@ export class CommandBuilder {
      */
     public aliases: string[] = [];
     /**
+     * Help message
+     */
+    public help: string;
+    /**
      * Positional arguments definition
      */
     public args: CommandArgument[] = [];
@@ -313,9 +476,20 @@ export class CommandBuilder {
     public subcommands: CommandBuilder[] = [];
     /**
      * Add an alias for this command/sub-command
+     * @param alias[] The aliases to add
+     * @returns {this}
      */
     public addAlias(...alias: string[]): this {
         this.aliases.push(...alias);
+        return this;
+    }
+    /**
+     * Set help message
+     * @param msg
+     * @returns {this}
+     */
+    public setHelp(msg: string): this {
+        this.help = msg;
         return this;
     }
     /**
@@ -324,6 +498,7 @@ export class CommandBuilder {
      * @param type
      * @param [id]
      * @param [build]
+     * @returns {this}
      */
     public addArgument(name: string, type: string | CommandTypeParser, id?: string, build?: (arg: CommandArgument) => void): this {
         const arg = new CommandArgument(name, type, id);
@@ -337,6 +512,7 @@ export class CommandBuilder {
      * @param [short]
      * @param [id]
      * @param [build]
+     * @returns {this}
      */
     public addFlag(long: string, short?: string, id?: string, build?: (flag: CommandFlag) => void): this {
         const flag = new CommandFlag(long, short, id);
@@ -349,6 +525,7 @@ export class CommandBuilder {
      * @param name
      * @param [id]
      * @param [build]
+     * @returns {this}
      */
     public addSubCommand(name: string, id?: string, build?: (cmd: CommandBuilder) => void): this {
         const cmd = new CommandBuilder(name, id);
