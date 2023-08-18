@@ -240,6 +240,123 @@ export function tokenizeCommand(cmd: string, startIndex?: number): CommandToken[
 }
 
 // ================================ //
+//           Type parsers           //
+// ================================ //
+
+// string type
+registerArgumentType("string", (argv, def) => {
+    return { value: argv[0].text };
+});
+// boolean type
+registerArgumentType("boolean", (argv, def) => {
+    const token = argv[0];
+    
+    if (!/^(true|false)$/.test(token.text)) {
+        const err = new CommandError("Type error: '" + token.text + "' is not a true or false");
+        err.token = token;
+        throw err;
+    }
+    
+    return {
+        value: token.text == "true" ? true : false
+    }
+});
+// number type
+registerArgumentType("number", (argv, def) => {
+    const token = argv[0];
+    const arg = token.text;
+    
+    if (!/^[-+]?(0|[1-9]\d*)(\.\d+)?$/.test(arg)) {
+        const err = new CommandError("Type error: '" + arg + "' is not a valid number");
+        err.token = token;
+        throw err;
+    }
+    
+    const num = parseFloat(arg);
+    
+    // check ranges
+    if (def.range) {
+        // check min
+        if (typeof def.range?.[0] == "number") {
+            if (num < def.range[0]) {
+                const err = new CommandError("Type error: " + arg + " is to small, it must be atleast " + def.range[0]);
+                err.token = token;
+                throw err;
+            }
+        }
+        // check max
+        if (typeof def.range?.[1] == "number") {
+            if (num > def.range[1]) {
+                const err = new CommandError("Type error: " + arg + " is to big, it must be atmost " + def.range[1]);
+                err.token = token;
+                throw err;
+            }
+        }
+    }
+    
+    return { value: num };
+});
+// typed numbers type
+["byte", "short", "int", "long"].forEach((name, idx) => {
+    // ranges
+    const point = 8 << idx;
+    const minSigned = -(2 ** (point - 1))
+    const minUnsigned = 0;
+    const maxSigned = 2 ** (point - 1) - 1;
+    const maxUnsigned = 2 ** point - 1;
+    
+    registerArgumentType(name, (argv, def) => {
+        const token = argv[0];
+        const arg = token.text;
+        
+        if (!/^[-+]?(0|[1-9]\d*)$/.test(arg)) {
+            const err = new CommandError("Type error: '" + arg + "' is not a valid " + name);
+            err.token = token;
+            throw err;
+        }
+        
+        const num = parseInt(arg);
+        
+        if (
+            (num < (def.unsigned ? minUnsigned : minSigned)) || // min
+            (num > (def.unsigned ? maxUnsigned : maxSigned))    // max
+        ) {
+            const err = new CommandError((2 ** idx * 8) + "-bit " + (def.unsigned ? "unsigned" : "signed") + " overflow");
+            err.token = token;
+            throw err;
+        }
+        
+        return { value: num };
+    });
+});
+// float num type
+registerArgumentType("float", (argv, def) => {
+    const token = argv[0];
+    const arg = token.text;
+    
+    if (!/^[-+]?(0|[1-9]\d*)\.\d+$/.test(arg)) {
+        const err = new CommandError("Type error: '" + arg + "' is not a valid float");
+        err.token = token;
+        throw err;
+    }
+    
+    return { value: parseFloat(arg) };
+});
+// double num type
+registerArgumentType("double", (argv, def) => {
+    const token = argv[0];
+    const arg = token.text;
+    
+    if (!/^[-+]?(0|[1-9]\d*)\.\d{2,}$/.test(arg)) {
+        const err = new CommandError("Type error: '" + arg + "' is not a valid double");
+        err.token = token;
+        throw err;
+    }
+    
+    return { value: parseFloat(arg) };
+});
+
+// ================================ //
 //            Builders              //
 // ================================ //
 
@@ -254,9 +371,7 @@ export class CommandArgument implements CommandArgumentType {
      */
     public static from(obj: CommandArgumentType): CommandArgument {
         const cls = new CommandArgument(obj.name, obj.type, obj.dest);
-        if ("help" in obj) cls.help = obj.help;
-        if ("required" in obj) cls.required = obj.required;
-        if ("default" in obj) cls.default = obj.default;
+        for (const k in obj) cls[k] = obj[k];
         return cls;
     }
     /**
