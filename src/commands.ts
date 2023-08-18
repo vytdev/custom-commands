@@ -545,10 +545,17 @@ export class CommandBuilder implements CommandFlagType {
 export class CommandContext {
     /**
      * Create a command execution context instance
+     * @param cmd
+     * @param args
      */
-    constructor(args: ParsedArgs) {
+    constructor(cmd: string, args: ParsedArgs) {
+        this.command = cmd;
         this.args = args;
     }
+    /**
+     * The command text
+     */
+    public readonly command: string;
     /**
      * Parsed args
      */
@@ -940,5 +947,14 @@ export class Command {
         processCmd(0, this.info, result);
         
         return result;
+    }
+    /**
+     * Calls the command with given arguments
+     * @param cmd The arguments to pass
+     * @returns {any} Return value of the command
+     */
+    public call(cmd: string): any {
+        const ctx = new CommandContext(cmd, this.parse(cmd));
+        return this.fn(ctx);
     }
 }
