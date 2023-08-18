@@ -525,7 +525,7 @@ export class CommandFlag implements CommandFlagType {
 /**
  * Command builder
  */
-export class CommandBuilder implements CommandFlagType {
+export class CommandBuilder implements CommandBuilderType {
     /**
      * Create a command builder instance from an object
      * @param obj The builder definition
