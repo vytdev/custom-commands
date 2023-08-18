@@ -340,7 +340,7 @@ export class CommandArgument implements CommandArgumentType {
 /**
  * Command flag definition
  */
-export class CommandFlag {
+export class CommandFlag implements CommandFlagType {
     /**
      * Create a command flag instance from an object
      * @param obj The flag definition
@@ -410,7 +410,7 @@ export class CommandFlag {
 /**
  * Command builder
  */
-export class CommandBuilder {
+export class CommandBuilder implements CommandFlagType {
     /**
      * Create a command builder instance from an object
      * @param obj The builder definition
