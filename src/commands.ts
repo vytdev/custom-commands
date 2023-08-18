@@ -16,11 +16,11 @@
  * @param argDef The command argument of the origin argument
  * @returns Parsing info
  */
-export type CommandTypeParser = (argv: string[], argDef: CommandArgument) => {
+export type CommandTypeParser = (argv: CommandToken[], argDef: CommandArgument) => {
     /**
      * The argument as parsed
      */
-    result: any,
+    value: any,
     /**
      * How many unparsed args was used for parsing
      */
@@ -44,15 +44,43 @@ export interface ParsedArgs {
 //             Utility              //
 // ================================ //
 
-interface splitData {
+const argTypes: { [name: string]: CommandTypeParser } = {};
+/**
+ * Function to register custom argument types
+ */
+export function registerArgumentType(typeName: string, parser: CommandTypeParser): void {
+    argTypes[typeName] = parser;
+}
+
+/**
+ * Command token structure
+ */
+export interface CommandToken {
+    /**
+     * The parameter
+     */
     text: string,
+    /**
+     * Start index of the param on the command
+     */
     start: number,
+    /**
+     * End index of the param on the command
+     */
     end: number,
+    /**
+     * Whether the param is quoted
+     */
     quoted: boolean,
 }
-// utility function to split commands into parts
-function splitCommand(cmd: string, startIndex?: number): splitData[] {
-    const result: splitData[] = [];
+/**
+ * Utility function to split the command into tokens
+ * @param cmd The command string to tokenize
+ * @param [startIndex] Optional start index, useful when skipping prefix
+ * @returns Array of command tokens
+ */
+export function tokenizeCommand(cmd: string, startIndex?: number): CommandToken[] {
+    const result: CommandToken[] = [];
     
     let text: string;
     let escapeChar = false;
@@ -155,7 +183,7 @@ export class CommandArgument {
     /**
      * Whether this argument is required
      */
-    public required: boolean;
+    public required: boolean = true;
     /**
      * Default value for the argument
      */
@@ -213,7 +241,7 @@ export class CommandFlag {
     constructor(long: string, short?: string, id?: string) {
         this.long = long;
         this.short = short;
-        this.dest = id;
+        this.dest = id || long;
     }
     /**
      * The place of this flag on the object when parsed
@@ -240,7 +268,7 @@ export class CommandFlag {
      */
     public addArgument(name: string, type: string | CommandTypeParser, id?: string, build?: (arg: CommandArgument) => void): this {
         const arg = new CommandArgument(name, type, id);
-        build(arg);
+        build?.(arg);
         this.args.push(arg);
         return this;
     }
@@ -299,7 +327,7 @@ export class CommandBuilder {
      */
     public addArgument(name: string, type: string | CommandTypeParser, id?: string, build?: (arg: CommandArgument) => void): this {
         const arg = new CommandArgument(name, type, id);
-        build(arg);
+        build?.(arg);
         this.args.push(arg);
         return this;
     }
@@ -310,9 +338,9 @@ export class CommandBuilder {
      * @param [id]
      * @param [build]
      */
-    public addFlag(long: string, short: string, id?: string, build?: (flag: CommandFlag) => void): this {
+    public addFlag(long: string, short?: string, id?: string, build?: (flag: CommandFlag) => void): this {
         const flag = new CommandFlag(long, short, id);
-        build(flag);
+        build?.(flag);
         this.flags.push(flag);
         return this;
     }
@@ -324,7 +352,7 @@ export class CommandBuilder {
      */
     public addSubCommand(name: string, id?: string, build?: (cmd: CommandBuilder) => void): this {
         const cmd = new CommandBuilder(name, id);
-        build(cmd);
+        build?.(cmd);
         this.subcommands.push(cmd);
         return this;
     }
@@ -348,4 +376,392 @@ export class CommandContext {
      * Parsed args
      */
     public readonly args: ParsedArgs;
+}
+
+/**
+ * Command error, when parsing or on execution
+ */
+export class CommandError extends Error {
+    /**
+     * Create a new command error instance
+     * @param msg Message to show
+     * @param [start] Offset of the syntax error on start
+     * @param [end] Offset of the syntax error on end
+     */
+    constructor(msg: string, start?: number, end?: number) {
+        super(msg);
+        this.message = msg;
+        this.start = start || 0;
+        this.end = end || 0;
+        this.name = "CommandError";
+    }
+    /**
+     * Error message
+     */
+    public readonly message: string;
+    /**
+     * The token where this error was thrown
+     */
+    public token: CommandToken;
+    /**
+     * The command that was called
+     */
+    public command: string;
+    /**
+     * Start index offset of token if this is a syntax error
+     */
+    public start: number = 0;
+    /**
+     * End index offset of token if this is a syntax error
+     */
+    public end: number = 0;
+    /**
+     * Whether it is syntax error
+     */
+    public get syntax(): boolean {
+        return !!this.token;
+    }
+    /**
+     * Get the syntax error stack
+     * @param offset Optional offset length of string to show in start and end
+     * of the error origin
+     * @returns {string} The traced stack in the command
+     */
+    public getStack(offset: number = 10): string {
+        // not a syntax error
+        if (!this.token) return "";
+        
+        // process stack trace
+        let start = this.token.start + this.start;
+        let end = this.token.end - this.end;
+        
+        return this.command.slice(Math.max(0, start - offset), start) +
+               ">>" + this.command.slice(start, end) + "<<" +
+               this.command.slice(end, Math.min(end + offset, this.command.length));
+    }
+    /**
+     * Return string representation of the error
+     */
+    public toString(): string {
+        let msg = this.message;
+        // a syntax error
+        if (this.syntax) {
+            msg += "\n    at column ";
+            msg += this.token.start + this.start + 1;
+            msg += "\n    ";
+            msg += this.getStack();
+        }
+        return msg;
+    }
+}
+
+/**
+ * Command instance
+ */
+export class Command {
+    /**
+     * Create a command
+     * @param info The command register information
+     * @param fn Callback to be executed when the command is called
+     */
+    constructor(info: CommandBuilder, fn: CommandCallback) {
+        this.info = info;
+        this.fn = fn;
+    }
+    /**
+     * Command information
+     */
+    public readonly info: CommandBuilder;
+    /**
+     * Command callback
+     */
+    public readonly fn: CommandCallback;
+    /**
+     * Enable parsing of flags in this command
+     */
+    public parseFlags: boolean = true;
+    /**
+     * Allow double-dash delimeters to disable subsequent options in a command
+     */
+    public breakableFlags: boolean = true;
+    /**
+     * Whether to use Java-like parsing for long flags, like: -longFlagName
+     */
+    public javaFlags: boolean = false;
+    /**
+     * Allow equals to parse arg in short flags, like: -abcd=argOfFlagD
+     */
+    public equalsInShortFlags: boolean = true;
+    /**
+     * Parse the given string with this command
+     * @param cmd
+     * @returns {ParsedArgs}
+     */
+    public parse(cmd: string): ParsedArgs {
+        const result: ParsedArgs = {};
+        const argv: CommandToken[] = tokenizeCommand(cmd);
+        let useFlags: boolean = this.parseFlags;
+        
+        // function to parse args
+        const processArg = (idx: number, argDef: CommandArgument, result: ParsedArgs): number => {
+            const typeParser = typeof argDef.type == "function" ? argDef.type : argTypes[argDef.type];
+            
+            // unknown type parser
+            if (typeof typeParser != "function") {
+                const err = new CommandError("Internal error: Type parser of argument is not callable");
+                err.token = argv[idx];
+                err.command = cmd;
+                throw err;
+            }
+            
+            let parsed;
+            try {
+                parsed = typeParser(argv.slice(idx), argDef);
+            } catch (e) {
+                // unknown error
+                if (!(e instanceof CommandError)) {
+                    const err = new CommandError("Internal error: Exception encountered with trace stack:\n" + e.stack);
+                    err.command = cmd;
+                    throw err;
+                }
+                e.command = cmd;
+                throw e;
+            }
+            
+            result[argDef.dest] = parsed.value;
+            return idx + (parsed.step || 1);
+        };
+        
+        // function to process command/sub-commands
+        const processCmd = (idx: number, cmdDef: CommandBuilder, result: ParsedArgs): number => {
+            // argument index in this command
+            let argIdx: number = 0;
+            
+            for ( ; idx < argv.length; idx++) {
+                const arg: CommandToken = argv[idx];
+                
+                // posible flag
+                if (useFlags && !arg.quoted && arg.text[0] == "-") {
+                    let isShort = arg.text[1] != "-";
+                    // break flags
+                    if (this.breakableFlags && !isShort && arg.text.length == 2) {
+                        useFlags = false;
+                        continue;
+                    }
+                    
+                    const chars = arg.text.slice(!isShort ? 2 : 1);
+                    const flagName = chars.split("=")[0];
+                    const equalArg = chars.slice(flagName.length + 1);
+                    // attempt to find a long flag
+                    const longFlag: CommandFlag = cmdDef.flags.find(v => v.long == flagName);
+                    
+                    // this is a long flag, but the flag not exists
+                    if (!isShort && !longFlag) {
+                        const err = new CommandError("Unrecognized flag: " + flagName, 2);
+                        err.token = arg;
+                        err.command = cmd;
+                        throw err;
+                    }
+                    
+                    // long flag found, but the arg only haves one dash
+                    if (this.javaFlags && longFlag) isShort = false;
+                    
+                    // current flag to process
+                    let currentFlag: CommandFlag = longFlag;
+                    
+                    // process short flags
+                    if (isShort) {
+                        let flagIdx = 0;
+                        for (const f of chars) {
+                            // for: -abcd=argOfFlagD
+                            if (this.equalsInShortFlags && currentFlag?.args.length && f == "=") {
+                                break;
+                            }
+                            // next flag
+                            flagIdx++;
+                            currentFlag = cmdDef.flags.find(v => v.short && v.short[0] == f);
+                            // unknown flag
+                            if (!currentFlag) {
+                                const err = new CommandError("Unknown option: " + f, flagIdx, arg.text.length - flagIdx - 1);
+                                err.command = cmd;
+                                err.token = arg;
+                                throw err;
+                            }
+                            result[currentFlag.dest] = true;
+                        }
+                    }
+                    
+                    // possible equals found
+                    if (chars != flagName) {
+                        // flag is like this: --flagName="arg"
+                        const useNextArg = !equalArg.length;
+                        
+                        // equal arg was found
+                        if (!currentFlag.args.length && longFlag) {
+                            const err = new CommandError("Option '--" + flagName + "' doesn't allow an argument", 3 + flagName.length);
+                            err.token = arg;
+                            err.command = cmd;
+                            // flag arg is empty
+                            if (useNextArg) {
+                                const nextArg = argv[idx + 1];
+                                err.token = nextArg;
+                                err.start = 0;
+                            }
+                            throw err;
+                        }
+                        
+                        arg.end -= equalArg.length + 2;
+                        
+                        if (!useNextArg) {
+                            argv.splice(idx + 1, 0, {
+                                start: arg.start + flagName.length + 2,
+                                end: arg.end + chars.length,
+                                text: equalArg,
+                                quoted: false,
+                            });
+                        }
+                    }
+                    
+                    // current flag has arguments
+                    if (currentFlag.args.length) {
+                        let flagArgIdx: number = 0;
+                        let processFlagArgs: boolean = true;
+                        let err: CommandError;
+                        
+                        // process args
+                        for ( ; flagArgIdx < currentFlag.args.length; flagArgIdx++) {
+                            const argDef = currentFlag.args[flagArgIdx];
+                            if (processFlagArgs) {
+                                try {
+                                    idx = processArg(idx + 1, argDef, result) - 1;
+                                    continue;
+                                } catch (e) {
+                                    err = e;
+                                    
+                                    // more args
+                                    if (argv.length <= idx + 1) {
+                                        err = new CommandError("Flag requires more argument");
+                                        err.token = {
+                                            text: "",
+                                            start: cmd.length,
+                                            end: cmd.length,
+                                            quoted: false,
+                                        };
+                                        err.command = cmd;
+                                    }
+                                    
+                                    processFlagArgs = false;
+                                }
+                            }
+                            
+                            // arg is required, or equal arg is found
+                            if (argDef.required || (flagArgIdx == 0 && chars != flagName)) throw err;
+                            // default args
+                            result[argDef.dest] = argDef.default;
+                        }
+                    }
+                    
+                    // for long flags
+                    result[currentFlag.dest] = true;
+                    
+                    continue;
+                }
+                
+                // process args
+                const argDef = cmdDef.args[argIdx++];
+                
+                // no arg left
+                if (!argDef) {
+                    // no sub commands
+                    if (!cmdDef.subcommands.length) {
+                        const err = new CommandError("Too many arguments", 0, -cmd.length);
+                        err.command = cmd;
+                        err.token = arg;
+                        throw err;
+                    }
+                    
+                    // process sub-commands
+                    const unNamedSubs: CommandBuilder[] = [];
+                    let done: boolean = false;
+                    
+                    for (const subDef of cmdDef.subcommands) {
+                        if (!subDef.name?.length) {
+                            unNamedSubs.push(subDef);
+                            continue;
+                        }
+                        
+                        // sub-command found with that name or alias
+                        if (subDef.name == arg.text || subDef.aliases.includes(arg.text)) {
+                            idx = processCmd(idx + 1, subDef, result);
+                            done = true;
+                            break;
+                        }
+                    }
+                    
+                    // sub-command done
+                    if (done) break;
+                    
+                    // no sub-command was found with that name
+                    if (!unNamedSubs.length) {
+                        const err = new CommandError("Unknown sub-command: " + arg.text);
+                        err.token = arg;
+                        err.command = cmd;
+                        throw err;
+                    }
+                    
+                    let err;
+                    
+                    for (const subDef of unNamedSubs) {
+                        const subResult: ParsedArgs = {};
+                        
+                        try {
+                            idx = processCmd(idx, subDef, subResult);
+                        } catch (e) {
+                            if (!err) err = e;
+                            continue;
+                        }
+                        
+                        done = true;
+                        for (const k in subResult) result[k] = subResult[k];
+                        break;
+                    }
+                    
+                    if (!done) throw err;
+                    
+                    break;
+                }
+                
+                // parse argument
+                idx = processArg(idx, argDef, result) - 1;
+            }
+            
+            // left not processed args
+            for ( ; argIdx < cmdDef.args.length; argIdx++) {
+                const argDef = cmdDef.args[argIdx];
+                if (argDef.required) {
+                    const err = new CommandError("Unexpected end of input");
+                    err.token = {
+                        text: "",
+                        start: cmd.length,
+                        end: cmd.length,
+                        quoted: false,
+                    };
+                    err.command = cmd;
+                    throw err;
+                }
+                
+                result[argDef.dest] = argDef.default;
+            }
+            
+            // command/sub-command processed successfully
+            result[cmdDef.dest] = true;
+            
+            return idx;
+        }
+        
+        // process command
+        processCmd(0, this.info, result);
+        
+        return result;
+    }
 }
