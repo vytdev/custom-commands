@@ -138,6 +138,16 @@ export interface ParsedArgs {
 //             Utility              //
 // ================================ //
 
+/**
+ * Cache raw command components
+ */
+const cachedComponents:
+    Map<CommandArgumentType, CommandArgument> &
+    Map<CommandFlagType, CommandFlag> &
+    Map<CommandBuilderType, CommandBuilder> = new Map();
+/**
+ * Registered argument types
+ */
 const argTypes: { [name: string]: CommandTypeParser } = {};
 /**
  * Function to register custom argument types
@@ -370,7 +380,10 @@ export class CommandArgument implements CommandArgumentType {
      * @returns {CommandArgument}
      */
     public static from(obj: CommandArgumentType): CommandArgument {
+        if (cachedComponents.has(obj)) return cachedComponents.get(obj);
         const cls = new CommandArgument(obj.name, obj.type, obj.dest);
+        cachedComponents.set(obj, cls);
+        
         for (const k in obj) cls[k] = obj[k];
         return cls;
     }
@@ -462,7 +475,10 @@ export class CommandFlag implements CommandFlagType {
      * @returns {CommandFlag}
      */
     public static from(obj: CommandFlagType): CommandFlag {
+        if (cachedComponents.has(obj)) return cachedComponents.get(obj);
         const cls = new CommandFlag(obj.long, obj.short, obj.dest);
+        cachedComponents.set(obj, cls);
+        
         if ("args" in obj) {
             for (const argDef of obj.args) {
                 cls.args.push(CommandArgument.from(argDef));
@@ -532,7 +548,10 @@ export class CommandBuilder implements CommandBuilderType {
      * @returns {CommandBuilder}
      */
     public static from(obj: CommandBuilderType): CommandBuilder {
+        if (cachedComponents.has(obj)) return cachedComponents.get(obj);
         const cls = new CommandBuilder(obj.name, obj.dest);
+        cachedComponents.set(obj, cls);
+        
         if ("aliases" in obj) cls.aliases = obj.aliases;
         if ("help" in obj) cls.help = obj.help;
         if ("args" in obj) {
