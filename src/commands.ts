@@ -4,6 +4,7 @@
  * Version: 0.1.0
  * Author: VYT
  * Source code: https://github.com/vytdev/custom-commands
+ * Documentation: https://github.com/vytdev/custom-commands/blob/master/docs/index.md
  */
 
 // import this required module
