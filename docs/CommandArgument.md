@@ -26,7 +26,7 @@ arguments dynamically. This takes two to three parameters:
 
 ### Static methods
 
-`CommandArgument.prototype.from()`
+`CommandArgument.from()`
 
 Create a `CommandArgument` instance from a raw [`CommandArgumentType`][type] object,
 like as follows:
