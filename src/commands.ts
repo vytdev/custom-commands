@@ -6,6 +6,9 @@
  * Source code: https://github.com/vytdev/custom-commands
  */
 
+// import this required module
+import { world, ChatSendBeforeEvent, Player } from "@minecraft/server";
+
 // ================================ //
 //              Types               //
 // ================================ //
@@ -681,10 +684,12 @@ export class CommandContext {
      * Create a command execution context instance
      * @param cmd
      * @param args
+     * @param [data]
      */
-    constructor(cmd: string, args: ParsedArgs) {
+    constructor(cmd: string, args: ParsedArgs, data?: ChatSendBeforeEvent) {
         this.command = cmd;
         this.args = args;
+        this.sender = data?.sender;
     }
     /**
      * The command text
@@ -694,6 +699,10 @@ export class CommandContext {
      * Parsed args
      */
     public readonly args: ParsedArgs;
+    /**
+     * The player who executes the command, can be undefined
+     */
+    public readonly sender: Player;
 }
 
 /**
@@ -812,12 +821,13 @@ export class Command {
     public equalsInShortFlags: boolean = true;
     /**
      * Parse the given string with this command
-     * @param cmd
+     * @param cmd The command to parse
+     * @param [prefixLength] Where to start parsing the command in the string
      * @returns {ParsedArgs}
      */
-    public parse(cmd: string): ParsedArgs {
+    public parse(cmd: string, prefixLength?: number): ParsedArgs {
         const result: ParsedArgs = {};
-        const argv: CommandToken[] = tokenizeCommand(cmd);
+        const argv: CommandToken[] = tokenizeCommand(cmd, prefixLength);
         let useFlags: boolean = this.parseFlags;
         
         // function to parse args
@@ -1090,5 +1100,105 @@ export class Command {
     public call(cmd: string): any {
         const ctx = new CommandContext(cmd, this.parse(cmd));
         return this.fn(ctx);
+    }
+}
+
+/**
+ * Command registry handler class
+ */
+export class CommandRegistry {
+    /**
+     * Create a new registry
+     * @param [prefix] Prefix to use in chat messages, this registry and the
+     * contained commands wont be available on chats if this parameter not given.
+     */
+    constructor(prefix?: string) {
+        if (typeof prefix == "string")
+            this.startService(prefix);
+    }
+    /**
+     * @private
+     */
+    private _cmds: Command[] = [];
+    private _listener: (arg: ChatSendBeforeEvent) => void;
+    /**
+     * The current prefix
+     */
+    public prefix: string = null;
+    /**
+     * Start command service on chats
+     * @param prefix Prefix to use
+     */
+    public startService(prefix: string): void {
+        this.prefix = prefix;
+        this._listener = world.beforeEvents.chatSend.subscribe(ev => {
+            // not starts with our prefix
+            if (!ev.message.startsWith(prefix)) return;
+            
+            // cancel this message from being broadcasted
+            ev.cancel = true;
+            
+            const msg = ev.message.slice(prefix.length);
+            // the name of the command
+            const cmdName = msg.trim().split(/\s+/, 1)[0];
+            // command class
+            const cmdData = this.getCommand(cmdName, true);
+            
+            if (!cmdData)
+                return ev.sender.sendMessage("§cUnknown command: " + cmdName + ". Please check that the command exists and you have permission to use it.");
+            
+            // where to start parsing
+            const startPos = prefix.length + cmdName.length + msg.match(/^\s*/)[0].length;
+            
+            try {
+                // attempt to call the command
+                const ctx = new CommandContext(ev.message, cmdData.parse(ev.message, startPos), ev);
+                cmdData.fn(ctx);
+            }
+            catch (e) {
+                // handle exceptions
+                if (e instanceof CommandError) {
+                    ev.sender.sendMessage("§c" + e.toString());
+                }
+                // unknown error
+                else {
+                    ev.sender.sendMessage("§cInternal error");
+                    ev.sender.sendMessage("§c" + (e?.stack ? e.stack : e));
+                }
+            }
+        });
+    }
+    /**
+     * Stop command service on chats if active
+     * @returns {boolean} True if the service are active and stopped, false
+     * otherwise
+     */
+    public stopService(): boolean {
+        if (!this._listener) return false;
+        world.beforeEvents.chatSend.unsubscribe(this._listener);
+        this._listener = null;
+        return true;
+    }
+    /**
+     * Search for a command in the registry
+     * @param cmd The command name, or alias
+     * @param [alias] Whether to search also for alias
+     * @returns {Command} The command class
+     */
+    public getCommand(cmd: string, alias?: boolean): Command {
+        return this._cmds.find(v => v.info.name == cmd || (alias && v.info.aliases?.includes(cmd)));
+    }
+    /**
+     * Register a new command to this registry
+     * @param info {@link CommandBuilder} instance or a {@link CommandBuilderType}
+     * object that represents the command information
+     * @param callback Callable to execute when the command was called
+     * @returns {Command} Created Command class
+     */
+    public register(info: CommandBuilder | CommandBuilderType, callback: CommandCallback): Command {
+        if (!(info instanceof CommandBuilder)) info = CommandBuilder.from(info);
+        const cmd = new Command(info as CommandBuilder, callback);
+        this._cmds.push(cmd);
+        return cmd;
     }
 }
