@@ -1,39 +1,36 @@
-# Docs
+# Bedrock Custom Commands Documentation
 
-Welcome to [Bedrock Custom Commands][repo] documentation. Here are the references
-for the API:
+Welcome to the documentation for Bedrock Custom Commands! Whether you're a
+seasoned server administrator or a Minecraft enthusiast exploring new possibilities,
+you're in the right place.
 
-### Classes
+### Elevate Your Minecraft Experience
 
-Builders:
+This empowers you to take control of your Minecraft server like never before. Create
+custom commands, modify gameplay, and enhance your server with ease.
 
-- [`CommandArgument`](./CommandArgument.md)
-- [`CommandFlag`](./CommandFlag.md)
-- [`CommandBuilder`](./CommandBuilder.md)
+### What You'll Discover
 
-Other:
+In this documentation, you'll find comprehensive guides and tutorials on how to
+harness the full potential of Custom Commands. We'll walk you through command creation,
+showcase real-world examples, and provide tips and tricks to make your Minecraft
+server truly unique.
 
-- [`Command`](./Command.md)
-- [`CommandRegistry`](./CommandRegistry.md)
-- [`CommandContext`](./CommandContext.md)
-- [`CommandError`](./CommandError.md)
+> **Please Note:** The documentation is a work in progress, and some sections
+  may be incomplete or missing. We're actively working to provide comprehensive
+  guidance for using Bedrock Custom Commands. Your patience is appreciated as we
+  continue to improve the documentation.
 
-### Functions
 
-- [`registerArgumentType`](./registerArgumentType.md)
-- [`tokenizeCommand`](./tokenizeCommand.md)
+### Ready to Get Started?
 
-### Types
+Let's embark on this Minecraft adventure together! If you're eager to start crafting
+custom commands, head over to the [Getting Started](starting.md) section, and
+let your creativity run wild.
 
-- [`CommandTypeParser`](./CommandTypeParser.md)
-- [`CommandCallback`](./CommandCallback.md)
+For more details, check out the following sections:
 
-### Interfaces
-
-- [`CommandArgumentType`](./CommandArgumentType.md)
-- [`CommandFlagType`](./CommandFlagType.md)
-- [`CommandBuilderType`](./CommandBuilderType.md)
-- [`ParsedArgs`](./ParsedArgs.md)
-- [`CommandToken`](./CommandToken.md)
-
-[repo]: https://github.com/vytdev/custom-commands
+- [Installation](install.md)
+- [Parsing Conventions](parsing.md)
+- [API Documentation](api/index.md)
+- [Type Parsers](types/index.md)
